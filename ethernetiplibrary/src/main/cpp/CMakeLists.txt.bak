@@ -1,0 +1,86 @@
+cmake_minimum_required(VERSION 3.22.1)
+project("ethernetip-library")
+
+# Set the C++ standard
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+file(GLOB_RECURSE OPENER_SOURCES
+        ${CMAKE_CURRENT_SOURCE_DIR}/opener/*.c
+)
+
+
+# Create shared library from your native and OpENer sources
+add_library(
+        ethernetip-library
+        SHARED
+        native-lib.cpp
+        ${OPENER_SOURCES}
+)
+
+# Include directories
+include_directories(
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/opener
+        ${CMAKE_CURRENT_SOURCE_DIR}/opener/cip
+        ${CMAKE_CURRENT_SOURCE_DIR}/opener/enet_encap
+        ${CMAKE_CURRENT_SOURCE_DIR}/opener/ports
+        ${CMAKE_CURRENT_SOURCE_DIR}/opener/ports/sample_application
+
+
+        ${CMAKE_CURRENT_SOURCE_DIR}/opener/ports/MINGW
+        ${CMAKE_CURRENT_SOURCE_DIR}/opener/ports/MINGW/sample_application
+        ${CMAKE_CURRENT_SOURCE_DIR}/opener/ports/nvdata
+        ${CMAKE_CURRENT_SOURCE_DIR}/opener/ports/POSIX
+        ${CMAKE_CURRENT_SOURCE_DIR}/opener/ports/POSIX/sample_application
+        ${CMAKE_CURRENT_SOURCE_DIR}/opener/ports/STM32
+        ${CMAKE_CURRENT_SOURCE_DIR}/opener/ports/STM32/sample_application
+        ${CMAKE_CURRENT_SOURCE_DIR}/opener/ports/WIN32
+        ${CMAKE_CURRENT_SOURCE_DIR}/opener/ports/STM32/sample_application
+        ${CMAKE_CURRENT_SOURCE_DIR}/opener/utils
+)
+
+# Find Android log library
+find_library(log-lib log)
+
+# Link the native lib to Android log
+target_link_libraries(
+        ethernetip-library
+        ${log-lib}
+)
+
+
+
+
+
+#[[
+# CMakeLists.txt for EtherNet/IP Library
+cmake_minimum_required(VERSION 3.22.1)
+
+project("ethernetip-library")
+
+# Set C++ standard
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Add logging support
+find_library(log-lib log)
+
+# Create a placeholder native library for now
+# We'll add OpENer integration in the next steps
+add_library(
+        ethernetip-library
+        SHARED
+        native-lib.cpp
+)
+
+# Include directories (we'll add OpENer headers here later)
+target_include_directories(ethernetip-library PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+# Link libraries
+target_link_libraries(
+        ethernetip-library
+        ${log-lib}
+)]]
