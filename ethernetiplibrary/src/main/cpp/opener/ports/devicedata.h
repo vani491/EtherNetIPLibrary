@@ -12,6 +12,6 @@
 #define OPENER_DEVICE_PRODUCT_CODE   (65001)         // Product Code
 #define OPENER_DEVICE_MAJOR_REVISION (1)             // Major Revision
 #define OPENER_DEVICE_MINOR_REVISION (0)             // Minor Revision
-#define OPENER_DEVICE_NAME           ("OpENer Android") // Device Name
+#define OPENER_DEVICE_NAME           ("Weight Scale") // Device Name
 
 #endif /* DEVICE_DATA_H_ */

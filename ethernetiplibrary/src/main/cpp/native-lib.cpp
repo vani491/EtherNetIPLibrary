@@ -3,6 +3,8 @@
 #include <android/log.h>    // ✅ C++ header — stays outside
 #include <unistd.h>         // ✅ POSIX header — stays outside
 #include <thread>
+#include "cipidentity.h"
+#include <cstring>
 // ✅ Only C headers go inside this block
 extern "C" {
 #include "opener_api.h"
@@ -19,7 +21,9 @@ extern "C" {
 
 #define BringupNetwork(if_name, method, if_cfg, hostname)  ((EipStatus)kEipStatusOk)
 #define ShutdownNetwork(if_name)  ((EipStatus)kEipStatusOk)
-extern volatile int g_end_stack;
+//extern volatile int g_end_stack;
+static volatile int g_end_stack1 = false;
+
 
 
 #define LOG_TAG "EtherNetIP-Native"
@@ -100,6 +104,7 @@ Java_com_omnixone_ethernetiplibrary_EtherNetIPLibrary_startOpENerStack(
         env->ReleaseStringUTFChars(interfaceNameJ, interfaceName);
         return env->NewStringUTF(logStr.c_str());
     }
+/*
 
     // Step 9: Check if DHCP is used
     CipDword network_config_method = g_tcpip.config_control & kTcpipCfgCtrlMethodMask;
@@ -110,8 +115,8 @@ Java_com_omnixone_ethernetiplibrary_EtherNetIPLibrary_startOpENerStack(
         log("Info: DHCP network configuration started");
 
         // Wait until IP is assigned or stack is stopped
-        eip_status = IfaceWaitForIp(interfaceName, -1, &g_end_stack);
-        if (kEipStatusOk == eip_status && 0 == g_end_stack) {
+        eip_status = IfaceWaitForIp(interfaceName, -1, &g_end_stack1);
+        if (kEipStatusOk == eip_status && 0 == g_end_stack1) {
             eip_status = IfaceGetConfiguration(interfaceName, &g_tcpip.interface_configuration);
             if (eip_status < 0) {
                 log("Warning: Problems getting interface configuration");
@@ -122,13 +127,14 @@ Java_com_omnixone_ethernetiplibrary_EtherNetIPLibrary_startOpENerStack(
             log("Error: DHCP interface wait failed or aborted");
         }
     }
+*/
 
     // Step 10: Initialize the network handler
-    if (!g_end_stack && kEipStatusOk == NetworkHandlerInitialize()) {
+    if (!g_end_stack1 && kEipStatusOk == NetworkHandlerInitialize()) {
         log("Info:  Starting OpENer event loop in background thread");
         std::string ifaceName(interfaceName);
         std::thread([] {
-            while (!g_end_stack) {
+            while (!g_end_stack1) {
                 if (kEipStatusOk != NetworkHandlerProcessCyclic()) {
                     LOGE("Error in NetworkHandler loop! Exiting OpENer.");
                     break;
@@ -154,7 +160,8 @@ JNIEXPORT void JNICALL
 Java_com_omnixone_ethernetiplibrary_EtherNetIPLibrary_stopOpENerStack(
         JNIEnv *env,
         jobject /* this */) {
-    g_end_stack = SIGINT;
+//    g_end_stack1 = SIGINT;
+    g_end_stack1 = true;
     LOGI("Signal sent to stop OpENer stack.");
 }
 
@@ -162,8 +169,57 @@ Java_com_omnixone_ethernetiplibrary_EtherNetIPLibrary_stopOpENerStack(
 extern "C"
 JNIEXPORT jboolean JNICALL
 Java_com_omnixone_ethernetiplibrary_EtherNetIPLibrary_isOpENerRunning(JNIEnv *env, jobject) {
-    return g_end_stack == 0 ? JNI_TRUE : JNI_FALSE;
+    return g_end_stack1 == 0 ? JNI_TRUE : JNI_FALSE;
 }
+
+extern "C" JNIEXPORT jobject JNICALL
+Java_com_omnixone_ethernetiplibrary_EtherNetIPLibrary_getIdentity(JNIEnv* env, jobject /* thisObj */) {
+    // 1. Find Java class OpenerIdentity
+    jclass identityClass = env->FindClass("com/omnixone/ethernetiplibrary/OpenerIdentity");
+    if (!identityClass) return nullptr;
+
+    // 2. Call default constructor
+    jmethodID constructor = env->GetMethodID(identityClass, "<init>", "()V");
+    if (!constructor) return nullptr;
+
+    jobject identityObj = env->NewObject(identityClass, constructor);
+    if (!identityObj) return nullptr;
+
+    // 3. Set each field
+    env->SetIntField(identityObj, env->GetFieldID(identityClass, "vendorId", "I"), g_identity.vendor_id);
+    env->SetIntField(identityObj, env->GetFieldID(identityClass, "deviceType", "I"), g_identity.device_type);
+    env->SetIntField(identityObj, env->GetFieldID(identityClass, "productCode", "I"), g_identity.product_code);
+    env->SetIntField(identityObj, env->GetFieldID(identityClass, "majorRevision", "I"), g_identity.revision.major_revision);
+    env->SetIntField(identityObj, env->GetFieldID(identityClass, "minorRevision", "I"), g_identity.revision.minor_revision);
+    env->SetIntField(identityObj,env->GetFieldID(identityClass, "serialNumber", "I"),static_cast<jint>(g_identity.serial_number));
+
+    // 4. Set product name
+    char name_buffer[256];
+    size_t len = g_identity.product_name.length;
+    if (len >= sizeof(name_buffer)) {
+        len = sizeof(name_buffer) - 1;
+    }
+    std::memcpy(name_buffer, g_identity.product_name.string, len);
+    name_buffer[len] = '\0';
+
+    jstring jProductName = env->NewStringUTF(name_buffer);
+    env->SetObjectField(identityObj, env->GetFieldID(identityClass, "productName", "Ljava/lang/String;"), jProductName);
+
+    return identityObj;
+}
+
+
+
+extern EipUint8 g_assembly_data064[32];
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_omnixone_ethernetiplibrary_EtherNetIPLibrary_setInputValue(JNIEnv *env, jobject thiz, jint index, jbyte value) {
+    if (index >= 0 && index < 32) {
+        g_assembly_data064[index] = (EipUint8)value;
+    }
+}
+
+
 
 
 
