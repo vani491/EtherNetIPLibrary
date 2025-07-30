@@ -5,6 +5,10 @@
 #include <thread>
 #include "cipidentity.h"
 #include <cstring>
+
+#include "jni_bridge.h"
+
+
 // ✅ Only C headers go inside this block
 extern "C" {
 #include "opener_api.h"
@@ -30,6 +34,46 @@ static volatile int g_end_stack1 = false;
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
+JavaVM* g_JavaVM = nullptr;
+jclass g_cachedClass = nullptr;
+
+extern "C"
+JNIEXPORT jint JNICALL
+JNI_OnLoad(JavaVM* vm, void* reserved) {
+    g_JavaVM = vm;
+
+    JNIEnv* env;
+    if (g_JavaVM->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
+        return JNI_ERR;
+    }
+
+    jclass localRef = env->FindClass("com/omnixone/ethernetiplibrary/EtherNetIPLibrary");
+    if (localRef == nullptr) {
+        return JNI_ERR;
+    }
+
+    // Promote to global ref so you can use it later from other threads
+    g_cachedClass = reinterpret_cast<jclass>(env->NewGlobalRef(localRef));
+    if (g_cachedClass == nullptr) {
+        LOGI("g_cachedClass is null");
+        return 0;
+    }
+//    g_env->DeleteLocalRef(localRef);
+    return JNI_VERSION_1_6;
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+JNI_OnUnload(JavaVM* vm, void* reserved) {
+    JNIEnv* env;
+    vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6);
+    if (g_cachedClass != nullptr) {
+    env->DeleteGlobalRef(g_cachedClass);
+    g_cachedClass = nullptr;
+
+    }
+}
+
 
 extern "C"
 JNIEXPORT jstring JNICALL
@@ -41,12 +85,15 @@ Java_com_omnixone_ethernetiplibrary_EtherNetIPLibrary_getVersionFromJNI(
     return env->NewStringUTF(version.c_str());
 }
 
+
+
 extern "C"
 JNIEXPORT jstring JNICALL
 Java_com_omnixone_ethernetiplibrary_EtherNetIPLibrary_startOpENerStack(
         JNIEnv *env,
         jobject /* this */,
         jstring interfaceNameJ) {
+
 
     const char *interfaceName = env->GetStringUTFChars(interfaceNameJ, 0);
     uint8_t iface_mac[6];
@@ -128,12 +175,14 @@ Java_com_omnixone_ethernetiplibrary_EtherNetIPLibrary_startOpENerStack(
         }
     }
 */
-
+    EipStatus ret = NetworkHandlerInitialize();
     // Step 10: Initialize the network handler
-    if (!g_end_stack1 && kEipStatusOk == NetworkHandlerInitialize()) {
+    if ( kEipStatusOk == ret) {
         log("Info:  Starting OpENer event loop in background thread");
+        g_end_stack1 = false;
         std::string ifaceName(interfaceName);
         std::thread([] {
+
             while (!g_end_stack1) {
                 if (kEipStatusOk != NetworkHandlerProcessCyclic()) {
                     LOGE("Error in NetworkHandler loop! Exiting OpENer.");
@@ -147,12 +196,17 @@ Java_com_omnixone_ethernetiplibrary_EtherNetIPLibrary_startOpENerStack(
             ShutdownCipStack(); // Step 11: Clean CIP
             ShutdownNetwork(ifaceName.c_str());
         }).detach();
+
         log("Info: Background thread started successfully");
     }else {
-        log("Error: Failed to initialize NetworkHandler or stack was stopped");
+        std::string message = "Error: Failed to initialize NetworkHandler or stack was stopped. g_end_stack1: "
+                              + std::to_string(g_end_stack1) + " NetworkHandler: " + std::to_string(ret);
+
+        log(message.c_str());
     }
     env->ReleaseStringUTFChars(interfaceNameJ, interfaceName);
     return env->NewStringUTF(logStr.c_str());
+
 }
 
 extern "C"
@@ -160,8 +214,11 @@ JNIEXPORT void JNICALL
 Java_com_omnixone_ethernetiplibrary_EtherNetIPLibrary_stopOpENerStack(
         JNIEnv *env,
         jobject /* this */) {
-//    g_end_stack1 = SIGINT;
+    __android_log_print(ANDROID_LOG_INFO, "JNI", "Line: %d | Function: %s", __LINE__, __FUNCTION__);
+
     g_end_stack1 = true;
+    __android_log_print(ANDROID_LOG_INFO, "JNI", "Line: %d | Function: %s", __LINE__, __FUNCTION__);
+
     LOGI("Signal sent to stop OpENer stack.");
 }
 
@@ -210,12 +267,36 @@ Java_com_omnixone_ethernetiplibrary_EtherNetIPLibrary_getIdentity(JNIEnv* env, j
 
 
 
-extern EipUint8 g_assembly_data064[32];
-
+/*extern EipUint8 g_assembly_data064[32];
 extern "C" JNIEXPORT void JNICALL
 Java_com_omnixone_ethernetiplibrary_EtherNetIPLibrary_setInputValue(JNIEnv *env, jobject thiz, jint index, jbyte value) {
     if (index >= 0 && index < 32) {
         g_assembly_data064[index] = (EipUint8)value;
+    }
+}*/
+
+extern EipUint8 g_assembly_data064[32];
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_omnixone_ethernetiplibrary_EtherNetIPLibrary_setInputValues(JNIEnv *env, jobject thiz, jbyteArray values) {
+    // Get the length of the incoming byte array
+    jsize length = env->GetArrayLength(values);
+
+    // Check if the length matches the size of g_assembly_data064
+    if (length == 32) {
+        // Get a pointer to the elements of the Java byte array
+        jbyte* byteArray = env->GetByteArrayElements(values, nullptr);
+
+        // Copy the elements from the Java byte array to g_assembly_data064
+        for (int i = 0; i < 32; i++) {
+            g_assembly_data064[i] = (EipUint8) byteArray[i];
+        }
+
+        // Release the Java byte array
+        env->ReleaseByteArrayElements(values, byteArray, 0);
+    } else {
+        // Handle the case where the length is not 32
+        // You can either throw an exception or return an error code
     }
 }
 
@@ -223,3 +304,47 @@ Java_com_omnixone_ethernetiplibrary_EtherNetIPLibrary_setInputValue(JNIEnv *env,
 
 
 
+extern "C" int sendDataToJavaFromCPPWrapper(const uint8_t* data, int length) {
+    JNIEnv* env = nullptr;
+
+    if (g_JavaVM == nullptr) {
+        LOGI("g_JavaVM is null");
+        return 0;
+    }
+
+    if (g_JavaVM->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) {
+        if (g_JavaVM->AttachCurrentThread(&env, nullptr) != JNI_OK) {
+            LOGI("Failed to attach current thread");
+            return 0;
+        }
+    }
+
+    if (g_cachedClass == nullptr) {
+        LOGI("g_cachedClass is null");
+        return 0;
+    }
+
+
+    jmethodID methodID = env->GetStaticMethodID(g_cachedClass, "onDataFromCpp", "([B)V");
+    if (methodID == nullptr) {
+        LOGI("Failed to get method ID");
+        return 0;
+    }
+
+    jbyteArray byteArray = env->NewByteArray(length);
+    env->SetByteArrayRegion(byteArray, 0, length, reinterpret_cast<const jbyte*>(data));
+
+//    jbyte* bytes = g_env1->GetByteArrayElements(byteArray, NULL);
+//    jsize arrayLength = g_env1->GetArrayLength(byteArray);
+//    std::string output = "ByteArray: ";
+//    for (int i = 0; i < arrayLength; i++) {
+//        char buf[8];
+//        snprintf(buf, sizeof(buf), "%02X ", (uint8_t)bytes[i]);  // hex format
+//        output += buf;
+//    }
+//    __android_log_print(ANDROID_LOG_INFO, "JNI", "%s", output.c_str());
+
+    env->CallStaticVoidMethod(g_cachedClass, methodID, byteArray);
+    env->DeleteLocalRef(byteArray);
+    return 1;
+}

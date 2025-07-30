@@ -15,6 +15,9 @@
 #include "ciptcpipinterface.h"
 #include "cipqos.h"
 #include "nvdata.h"
+
+#include "jni_bridge.h"
+
 #if defined(OPENER_ETHLINK_CNTRS_ENABLE) && 0 != OPENER_ETHLINK_CNTRS_ENABLE
   #include "cipethernetlink.h"
   #include "ethlinkcbs.h"
@@ -140,8 +143,8 @@ EipStatus AfterAssemblyDataReceived(CipInstance *instance) {
     case DEMO_APP_OUTPUT_ASSEMBLY_NUM:
       /* Data for the output assembly has been received.
        * Mirror it to the inputs */
-      memcpy( &g_assembly_data064[0], &g_assembly_data096[0],
-              sizeof(g_assembly_data064) );
+//      memcpy( &g_assembly_data064[0], &g_assembly_data096[0],
+//              sizeof(g_assembly_data064) );
       break;
     case DEMO_APP_EXPLICT_ASSEMBLY_NUM:
       /* do something interesting with the new data from
@@ -163,6 +166,9 @@ EipStatus AfterAssemblyDataReceived(CipInstance *instance) {
   return status;
 }
 
+
+
+
 EipBool8 BeforeAssemblyDataSend(CipInstance *pa_pstInstance) {
   /*update data to be sent e.g., read inputs of the device */
   /*In this sample app we mirror the data from out to inputs on data receive
@@ -170,7 +176,11 @@ EipBool8 BeforeAssemblyDataSend(CipInstance *pa_pstInstance) {
    * the data is new.
    */
 
-  if (pa_pstInstance->instance_number == DEMO_APP_EXPLICT_ASSEMBLY_NUM) {
+    sendDataToJavaFromCPPWrapper(g_assembly_data096, 32);
+
+
+
+    if (pa_pstInstance->instance_number == DEMO_APP_EXPLICT_ASSEMBLY_NUM) {
     /* do something interesting with the existing data
      * for the explicit get-data-attribute message */
   }

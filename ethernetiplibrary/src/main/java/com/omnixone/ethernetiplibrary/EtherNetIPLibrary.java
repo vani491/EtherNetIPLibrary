@@ -1,14 +1,13 @@
 package com.omnixone.ethernetiplibrary;
 
-/**
- * EtherNet/IP Library for Android
- * Provides CIP (Common Industrial Protocol) communication capabilities
- */
+
 public class EtherNetIPLibrary {
 
+    private static CppDataListener dataListener;
     // Load the native library
     static {
         System.loadLibrary("opener-lib");
+        Class<?> ensureLoaded = com.omnixone.ethernetiplibrary.EtherNetIPLibrary.class;
     }
 
 
@@ -20,7 +19,7 @@ public class EtherNetIPLibrary {
     }
 
     public native OpenerIdentity getIdentity();
-    public static native void setInputValue(int index, byte value);
+    public static native void setInputValues(byte[] values);
 
 
     public String startStack(String interfaceName) {
@@ -30,4 +29,22 @@ public class EtherNetIPLibrary {
     public void stopStack() {
         stopOpENerStack();
     }
+
+
+    public static void onDataFromCpp(byte[] data) {
+//        System.out.println("Data received from C++:");
+//        for (byte b : data) {
+//            System.out.printf("%02X ", b & 0xFF);
+//        }
+//        System.out.println();
+
+        if (dataListener != null) {
+            dataListener.onCppDataReceived(data); // Notify MainActivity
+        }
+    }
+
+    public static void setCppDataListener(CppDataListener listener) {
+        dataListener = listener;
+    }
+
 }
