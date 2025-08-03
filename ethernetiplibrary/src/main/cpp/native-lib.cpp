@@ -275,7 +275,7 @@ Java_com_omnixone_ethernetiplibrary_EtherNetIPLibrary_setInputValue(JNIEnv *env,
     }
 }*/
 
-extern EipUint8 g_assembly_data064[32];
+extern EipUint8 g_assembly_data064[128];
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_omnixone_ethernetiplibrary_EtherNetIPLibrary_setInputValues(JNIEnv *env, jobject thiz, jbyteArray values) {
@@ -283,12 +283,12 @@ Java_com_omnixone_ethernetiplibrary_EtherNetIPLibrary_setInputValues(JNIEnv *env
     jsize length = env->GetArrayLength(values);
 
     // Check if the length matches the size of g_assembly_data064
-    if (length == 32) {
+    if (length == 128) {
         // Get a pointer to the elements of the Java byte array
         jbyte* byteArray = env->GetByteArrayElements(values, nullptr);
 
         // Copy the elements from the Java byte array to g_assembly_data064
-        for (int i = 0; i < 32; i++) {
+        for (int i = 0; i < 128; i++) {
             g_assembly_data064[i] = (EipUint8) byteArray[i];
         }
 

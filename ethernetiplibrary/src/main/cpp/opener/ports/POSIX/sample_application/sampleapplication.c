@@ -23,18 +23,18 @@
   #include "ethlinkcbs.h"
 #endif
 
-#define DEMO_APP_INPUT_ASSEMBLY_NUM                100 //0x064
-#define DEMO_APP_OUTPUT_ASSEMBLY_NUM               150 //0x096
-#define DEMO_APP_CONFIG_ASSEMBLY_NUM               151 //0x097
+#define DEMO_APP_INPUT_ASSEMBLY_NUM                102 //0x064
+#define DEMO_APP_OUTPUT_ASSEMBLY_NUM               101 //0x096
+#define DEMO_APP_CONFIG_ASSEMBLY_NUM               103 //0x097
 #define DEMO_APP_HEARTBEAT_INPUT_ONLY_ASSEMBLY_NUM  152 //0x098
 #define DEMO_APP_HEARTBEAT_LISTEN_ONLY_ASSEMBLY_NUM 153 //0x099
 #define DEMO_APP_EXPLICT_ASSEMBLY_NUM              154 //0x09A
 
 /* global variables for demo application (4 assembly data fields)  ************/
-
-EipUint8 g_assembly_data064[32]; /* Input */
-EipUint8 g_assembly_data096[32]; /* Output */
-EipUint8 g_assembly_data097[10]; /* Config */
+#define  ASSEMBLY_SIZE 128
+EipUint8 g_assembly_data064[ASSEMBLY_SIZE]; /* Input */
+EipUint8 g_assembly_data096[ASSEMBLY_SIZE+4]; /* Output */
+EipUint8 g_assembly_data097[0]; /* Config */
 EipUint8 g_assembly_data09A[32]; /* Explicit */
 
 /* local functions */
@@ -176,7 +176,7 @@ EipBool8 BeforeAssemblyDataSend(CipInstance *pa_pstInstance) {
    * the data is new.
    */
 
-    sendDataToJavaFromCPPWrapper(g_assembly_data096, 32);
+    sendDataToJavaFromCPPWrapper(g_assembly_data096, ASSEMBLY_SIZE+4);
 
 
 
