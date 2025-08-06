@@ -1,3 +1,4 @@
+
 plugins {
     id 'com.android.library'
 }
@@ -56,4 +57,13 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+// Add SLF4J API
+    implementation 'org.slf4j:slf4j-api:1.7.30'
+
+// Add a simple binding for SLF4J (for basic logging)
+    implementation 'org.slf4j:slf4j-simple:1.7.30'
+    implementation 'com.fazecast:jSerialComm:2.9.3'
+
+
+
 }
