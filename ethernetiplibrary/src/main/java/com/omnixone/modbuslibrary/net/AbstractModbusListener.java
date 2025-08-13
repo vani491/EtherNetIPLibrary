@@ -146,42 +146,56 @@ public abstract class AbstractModbusListener implements Runnable {
      */
     void handleRequest(AbstractModbusTransport transport, AbstractModbusListener listener) throws ModbusIOException {
 
-        // Get the request from the transport. It will be processed
-        // using an associated process image
+        logger.info("[HR] handleRequest() called");
 
+        // Get the request from the transport
         if (transport == null) {
+            logger.error("[HR] transport is NULL — throwing ModbusIOException");
             throw new ModbusIOException("No transport specified");
         }
+
+        logger.info("[HR] Reading request from transport: {}", transport.getClass().getSimpleName());
         ModbusRequest request = transport.readRequest(listener);
+        logger.info("[HR] Request object returned: {}", (request == null ? "NULL" : request.getClass().getSimpleName()));
+
         if (request == null) {
+            logger.error("[HR] request is NULL — throwing ModbusIOException");
             throw new ModbusIOException("Request for transport %s is invalid (null)", transport.getClass().getSimpleName());
         }
+
+        logger.info("[HR] Request HEX: {}", request.getHexMessage());
+
         ModbusResponse response;
 
-        // Test if Process image exists for this Unit ID
+        // Check process image
+        logger.info("[HR] Checking process image for UnitID={}", request.getUnitID());
         ProcessImage spi = getProcessImage(request.getUnitID());
         if (spi == null) {
+            logger.warn("[HR] No ProcessImage for UnitID={} — creating ExceptionResponse", request.getUnitID());
             response = request.createExceptionResponse(Modbus.ILLEGAL_ADDRESS_EXCEPTION);
             response.setAuxiliaryType(ModbusResponse.AuxiliaryMessageTypes.UNIT_ID_MISSMATCH);
-        }
-        else {
+        } else {
+            logger.info("[HR] ProcessImage FOUND — creating normal response");
             response = request.createResponse(this);
         }
 
+        // Debug logs for request/response
         if (logger.isDebugEnabled()) {
-            logger.debug("Request:{}", request.getHexMessage());
+            logger.debug("[HR] Request HEX: {}", request.getHexMessage());
 
             if (transport instanceof ModbusRTUTransport && response.getAuxiliaryType() == AuxiliaryMessageTypes.UNIT_ID_MISSMATCH) {
-                logger.debug("Not sending response because it was not meant for us.");
-            }
-            else {
-                logger.debug("Response:{}", response.getHexMessage());
+                logger.debug("[HR] Skipping send — UNIT_ID_MISSMATCH");
+            } else {
+                logger.debug("[HR] Response HEX: {}", response.getHexMessage());
             }
         }
 
         // Write the response
+        logger.info("[HR] Sending response via transport.writeResponse()");
         transport.writeResponse(response);
+        logger.info("[HR] transport.writeResponse() completed");
     }
+
 
     /**
      * Returns the related process image for this listener and Unit Id

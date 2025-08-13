@@ -26,6 +26,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Arrays;
 
 /**
  * Class that implements the ModbusRTU transport flavor.
@@ -244,40 +245,100 @@ public class ModbusRTUTransport extends ModbusSerialTransport {
      * @param msg a <code>ModbusMessage</code> value
      * @throws ModbusIOException If an error occurred bundling the message
      */
-    @Override
+/*    @Override
     protected void writeMessageOut(ModbusMessage msg) throws ModbusIOException {
-        try {
-            int len;
-            synchronized (byteOutputStream) {
-                // first clear any input from the receive buffer to prepare
-                // for the reply since RTU doesn't have message delimiters
-                clearInput();
-                // write message to byte out
-                byteOutputStream.reset();
-                msg.setHeadless();
-                msg.writeTo(byteOutputStream);
-                len = byteOutputStream.size();
-                int[] crc = ModbusUtil.calculateCRC(byteOutputStream.getBuffer(), 0, len);
-                byteOutputStream.writeByte(crc[0]);
-                byteOutputStream.writeByte(crc[1]);
-                // write message
-                writeBytes(byteOutputStream.getBuffer(), byteOutputStream.size());
-                if (logger.isDebugEnabled()) {
-                    logger.debug("Sent: {}", ModbusUtil.toHex(byteOutputStream.getBuffer(), 0, byteOutputStream.size()));
-                }
-                // clears out the echoed message
-                // for RS485
-                if (echo) {
-                    readEcho(len + 2);
-                }
-                lastRequest = new byte[len];
-                System.arraycopy(byteOutputStream.getBuffer(), 0, lastRequest, 0, len);
+        // Build full RTU frame: unitId + function + data + CRC
+        byte[] pdu = msg.getMessage(); // unitId+fc+data or sometimes just data depending on j2mod build
+        byte[] frame;
+
+        if (pdu != null && pdu.length >= 2) {
+            // pdu already includes unit + function (most j2mod builds)
+            int[] crc = ModbusUtil.calculateCRC(pdu, 0, pdu.length);
+            frame = Arrays.copyOf(pdu, pdu.length + 2);
+            frame[frame.length - 2] = (byte) crc[0]; // CRC Lo
+            frame[frame.length - 1] = (byte) crc[1]; // CRC Hi
+        } else {
+            // fallback: use hex message
+            String hex = msg.getHexMessage().replace(" ", "");
+            byte[] tmp = new byte[hex.length() / 2];
+            for (int i = 0; i < tmp.length; i++) {
+                tmp[i] = (byte) Integer.parseInt(hex.substring(2 * i, 2 * i + 2), 16);
+            }
+            int[] crc = ModbusUtil.calculateCRC(tmp, 0, tmp.length);
+            frame = Arrays.copyOf(tmp, tmp.length + 2);
+            frame[frame.length - 2] = (byte) crc[0];
+            frame[frame.length - 1] = (byte) crc[1];
+        }
+
+        logger.info("[RTU] TX frame ({} bytes): {}", frame.length, ModbusUtil.toHex(frame));
+
+        // Robust write: loop until all bytes written, log progress
+        int toWrite = frame.length;
+        int offset = 0;
+        int attempts = 0;
+        while (toWrite > 0) {
+            attempts++;
+            int n = getCommPort().writeBytes(frame, toWrite);
+            logger.info("[RTU] writeBytes attempt {} -> {}", attempts, n);
+            if (n < 0) {
+                throw new ModbusIOException("I/O failed to write (returned " + n + ")");
+            }
+            offset += n;
+            toWrite -= n;
+
+            // Safety: avoid tight loop if driver ever returns 0
+            if (n == 0) {
+                ModbusUtil.sleep(2);
             }
         }
-        catch (IOException ex) {
-            throw new ModbusIOException("I/O failed to write");
+        logger.info("[RTU] write complete ({} attempts)", attempts);
+
+        // If you use RS-485 echo mode (usually false), read echo here:
+        // if (isEcho()) { readEcho(frame.length); }
+    }*/
+
+
+
+    @Override
+    protected void writeMessageOut(ModbusMessage msg) throws ModbusIOException {
+        // Build PDU = [unitId][function][data...]
+        if (!(msg instanceof ModbusResponse)) {
+            throw new ModbusIOException("Expected ModbusResponse");
         }
+        ModbusResponse res = (ModbusResponse) msg;
+
+        byte[] data = msg.getMessage(); // may be just byteCount+payload
+        int dataLen = (data == null) ? 0 : data.length;
+
+        byte[] pdu = new byte[2 + dataLen];
+        pdu[0] = (byte) res.getUnitID();
+        pdu[1] = (byte) res.getFunctionCode();
+        if (dataLen > 0) System.arraycopy(data, 0, pdu, 2, dataLen);
+
+        // CRC over full PDU
+        int[] crc = ModbusUtil.calculateCRC(pdu, 0, pdu.length); // [lo, hi]
+
+        // Final RTU frame = PDU + CRC
+        byte[] frame = Arrays.copyOf(pdu, pdu.length + 2);
+        frame[frame.length - 2] = (byte) crc[0]; // CRC lo
+        frame[frame.length - 1] = (byte) crc[1]; // CRC hi
+
+        // Write all bytes (handle short writes)
+        int remaining = frame.length;
+        int offset = 0;
+        while (remaining > 0) {
+            int n = getCommPort().writeBytes(frame, remaining);
+            if (n <= 0) throw new ModbusIOException("I/O failed to write");
+            offset += n;
+            remaining -= n;
+            // small yield if a driver ever returns tiny chunks
+            if (n < 16) ModbusUtil.sleep(1);
+        }
+
+        // If you use RS-485 echo mode, uncomment:
+        // if (isEcho()) readEcho(frame.length);
     }
+
 
     @Override
     protected ModbusRequest readRequestIn(AbstractModbusListener listener) throws ModbusIOException {

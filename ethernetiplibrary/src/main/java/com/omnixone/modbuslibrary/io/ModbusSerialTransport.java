@@ -79,16 +79,26 @@ public abstract class ModbusSerialTransport extends AbstractModbusTransport {
     @Override
     public void writeResponse(ModbusResponse msg) throws ModbusIOException {
         // If this isn't a Slave ID missmatch message
-        if (msg.getAuxiliaryType().equals(ModbusResponse.AuxiliaryMessageTypes.UNIT_ID_MISSMATCH)) {
-            logger.debug("Ignoring response not meant for us");
-        }
-        else {
-            // We need to pause before sending the response
-            waitBetweenFrames();
 
-            // Send the response
-            writeMessage(msg);
+        logger.info("[TR] writeResponse() called — Response HEX: {}", msg.getHexMessage());
+        try {
+            if (msg.getAuxiliaryType().equals(ModbusResponse.AuxiliaryMessageTypes.UNIT_ID_MISSMATCH)) {
+                logger.debug("Ignoring response not meant for us");
+                logger.info("[TR] writeResponse() Ignoring response not meant for us");
+            }
+            else {
+                // We need to pause before sending the response
+                waitBetweenFrames();
+
+                // Send the response
+                writeMessage(msg);
+            }
+            logger.info("[TR] writeResponse() finished OK");
+        } catch (Exception e) {
+            logger.error("[TR] writeResponse() failed: {}", e.getMessage(), e);
+            throw e;
         }
+
     }
 
     @Override
@@ -103,44 +113,63 @@ public abstract class ModbusSerialTransport extends AbstractModbusTransport {
      * @throws ModbusIOException If the port throws an error
      */
     private void writeMessage(ModbusMessage msg) throws ModbusIOException {
+        logger.info("[TR] writeMessage() START — msg length={}, HEX={}",
+                msg.getOutputLength(),
+                msg.getHexMessage());
+
         open();
+        logger.info("[TR] Port opened, notifying listeners before write...");
         notifyListenersBeforeWrite(msg);
+
         try {
+            logger.info("[TR] Calling writeMessageOut() — will frame and send to commPort");
             writeMessageOut(msg);
+            logger.info("[TR] writeMessageOut() completed");
+
             long startTime = System.nanoTime();
 
-            // Wait here for the message to have been sent
+            // Calculate bytes/sec based on serial params
+            int dataBits = (commPort.getNumDataBits() == 0) ? 8 : commPort.getNumDataBits();
+            int stopBits = (commPort.getNumStopBits() == 0) ? 1 : commPort.getNumStopBits();
+            int parityBits = ((commPort.getParity() == SerialPort.NO_PARITY) ? 0 : 1);
+            double bytesPerSec = ((double) commPort.getBaudRate()) / (dataBits + stopBits + parityBits);
 
-            double bytesPerSec = ((double)commPort.getBaudRate()) / (((commPort.getNumDataBits() == 0) ? 8 : commPort.getNumDataBits()) + ((commPort.getNumStopBits() == 0) ? 1 : commPort.getNumStopBits()) + ((commPort.getParity() == SerialPort.NO_PARITY) ? 0 : 1));
+            logger.info("[TR] Baud={} DataBits={} StopBits={} ParityBits={} => Bytes/sec={}",
+                    commPort.getBaudRate(), dataBits, stopBits, parityBits, bytesPerSec);
+
             double delay = 1000000000.0 * msg.getOutputLength() / bytesPerSec;
             double delayMilliSeconds = Math.floor(delay / 1000000);
             double delayNanoSeconds = delay % 1000000;
+
+            logger.info("[TR] Calculated TX delay: {} ms + {} ns (total {} ns)",
+                    delayMilliSeconds, delayNanoSeconds, delay);
+
             try {
-
-                // For delays less than a millisecond, we need to chew CPU cycles unfortunately
-                // There are some fiddle factors here to allow for some oddities in the hardware
-
                 if (delayMilliSeconds == 0.0) {
+                    logger.info("[TR] Delay < 1ms — using busy-wait loop");
                     int priority = Thread.currentThread().getPriority();
                     Thread.currentThread().setPriority(Thread.MIN_PRIORITY);
                     long end = startTime + ((int) (delayNanoSeconds * 1.3));
                     while (System.nanoTime() < end) {
-                        // noop
+                        // busy loop
                     }
                     Thread.currentThread().setPriority(priority);
-                }
-                else {
+                } else {
+                    logger.info("[TR] Sleeping {} ms and {} ns for TX drain",
+                            (int) (delayMilliSeconds * 1.7),
+                            (int) (delayNanoSeconds * 1.5));
                     Thread.sleep((int) (delayMilliSeconds * 1.7), (int) (delayNanoSeconds * 1.5));
                 }
+            } catch (Exception e) {
+                logger.warn("[TR] Delay wait interrupted/failed: {}", e.getMessage(), e);
             }
-            catch (Exception e) {
-                logger.debug("nothing to do");
-            }
-        }
-        finally {
+        } finally {
+            logger.info("[TR] Notifying listeners after write");
             notifyListenersAfterWrite(msg);
+            logger.info("[TR] writeMessage() END");
         }
     }
+
 
     @Override
     public ModbusRequest readRequest(AbstractModbusListener listener) throws ModbusIOException {

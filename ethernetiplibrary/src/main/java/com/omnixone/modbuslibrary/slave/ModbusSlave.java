@@ -49,6 +49,25 @@ public class ModbusSlave {
 
     private final Map<Integer, ProcessImage> processImages = new HashMap<Integer, ProcessImage>();
 
+
+    // NEW: Android/Custom serial-connection constructor
+    protected ModbusSlave(com.omnixone.modbuslibrary.net.AbstractSerialConnection serialConnection)
+            throws com.omnixone.modbuslibrary.ModbusException {
+        this.type = ModbusSlaveType.SERIAL;
+        this.port = 0;
+        this.serialParams = null;
+
+        // Use the listener ctor that takes a connection
+        this.listener = new com.omnixone.modbuslibrary.net.ModbusSerialListener(serialConnection);
+
+        // Default listener props
+        this.listener.setAddress(null);
+        this.listener.setPort(0);
+        this.listener.setTimeout(0);
+    }
+
+
+
     /**
      * Creates a TCP modbus slave
      *

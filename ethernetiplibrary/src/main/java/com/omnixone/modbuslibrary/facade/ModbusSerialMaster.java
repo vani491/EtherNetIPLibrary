@@ -35,6 +35,20 @@ public class ModbusSerialMaster extends AbstractModbusMaster {
     private final AbstractSerialConnection connection;
     private final int transDelay;
 
+
+
+    // NEW: allow injecting a ready-made serial connection (e.g., AndroidUsbSerialConnection)
+    public ModbusSerialMaster(AbstractSerialConnection connection, int timeout, int transDelay) {
+        this.connection = connection;
+        this.timeout = timeout;
+        this.transDelay = (transDelay > -1) ? transDelay : Modbus.DEFAULT_TRANSMIT_DELAY;
+        if (this.connection != null) {
+            this.connection.setTimeout(timeout);
+        }
+    }
+
+
+
     /**
      * Constructs a new master facade instance for communication
      * with a given slave.
