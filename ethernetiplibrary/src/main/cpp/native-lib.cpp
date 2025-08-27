@@ -7,7 +7,7 @@
 #include <cstring>
 
 #include "jni_bridge.h"
-
+#include <sstream>
 
 // ✅ Only C headers go inside this block
 extern "C" {
@@ -27,6 +27,14 @@ extern "C" {
 #define ShutdownNetwork(if_name)  ((EipStatus)kEipStatusOk)
 //extern volatile int g_end_stack;
 static volatile int g_end_stack1 = false;
+
+extern int input_assembly_num ;
+extern int output_assembly_num ;
+extern int config_assembly_num ;
+
+extern int input_size ;
+extern int output_size ;
+extern int config_size ;
 
 
 
@@ -198,6 +206,17 @@ Java_com_omnixone_ethernetiplibrary_EtherNetIPLibrary_startOpENerStack(
         }).detach();
 
         log("Info: Background thread started successfully");
+        std::ostringstream oss;
+        oss << "Assembly Data\n"
+            << "input_assembly_num: "  << input_assembly_num  << "\n"
+            << "output_assembly_num: " << output_assembly_num << "\n"
+            << "config_assembly_num: " << config_assembly_num << "\n"
+            << "input_size: "          << input_size          << "\n"
+            << "output_size: "         << output_size         << "\n"
+            << "config_size: "         << config_size;
+
+        log(oss.str().c_str());
+
     }else {
         std::string message = "Error: Failed to initialize NetworkHandler or stack was stopped. g_end_stack1: "
                               + std::to_string(g_end_stack1) + " NetworkHandler: " + std::to_string(ret);
@@ -348,3 +367,30 @@ extern "C" int sendDataToJavaFromCPPWrapper(const uint8_t* data, int length) {
     env->DeleteLocalRef(byteArray);
     return 1;
 }
+
+
+//A function that accept 6 variable
+
+
+
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_omnixone_ethernetiplibrary_EtherNetIPLibrary_setAssemblyData(JNIEnv *env, jobject thiz,
+                                                                      jint input_assembly_num1,
+                                                                      jint output_assembly_num1,
+                                                                      jint config_assembly_num1,
+                                                                      jint input_size1,
+                                                                      jint output_size1,
+                                                                      jint config_size1
+                                                                      ) {
+
+    input_assembly_num = input_assembly_num1;
+    output_assembly_num = output_assembly_num1;
+    config_assembly_num = config_assembly_num1;
+    input_size = input_size1;
+    output_size = output_size1;
+    config_size = config_size1;
+
+
+}
+

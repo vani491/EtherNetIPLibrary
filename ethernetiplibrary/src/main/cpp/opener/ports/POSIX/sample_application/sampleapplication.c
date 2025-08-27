@@ -17,6 +17,8 @@
 #include "nvdata.h"
 
 #include "jni_bridge.h"
+#include <android/log.h>    // ✅ C++ header — stays outside
+
 
 #if defined(OPENER_ETHLINK_CNTRS_ENABLE) && 0 != OPENER_ETHLINK_CNTRS_ENABLE
   #include "cipethernetlink.h"
@@ -39,20 +41,101 @@ EipUint8 g_assembly_data09A[32]; /* Explicit */
 
 /* local functions */
 
+// sampleapplication_dynamic.c (or wherever you keep app utilities)
+#include "opener_api.h"
+#include <stdlib.h>
+#include <string.h>
+
+
+typedef struct {
+    CipInstanceNum inst;
+    EipByte *buf;
+} DynAsm;
+
+static DynAsm g_dyn_asms[16];  // track a few for cleanup; size as you like
+static size_t g_dyn_count = 0;
+
+CipInstance *CreateDynamicAssembly(CipInstanceNum inst, size_t size_bytes) {
+    // 1) allocate the payload buffer you own
+    EipByte *buf = (EipByte *)malloc(size_bytes);
+    if (!buf) return NULL;
+    memset(buf, 0, size_bytes);
+
+    // 2) create the Assembly instance pointed at that buffer
+    CipInstance *inst_ptr = CreateAssemblyObject(inst, buf, (EipUint16)size_bytes);
+    if (!inst_ptr) { free(buf); return NULL; }  // creation failed
+
+    // 3) remember buffer for later cleanup
+    if (g_dyn_count < (sizeof g_dyn_asms / sizeof g_dyn_asms[0])) {
+        g_dyn_asms[g_dyn_count++] = (DynAsm){inst, buf};
+    }
+    return inst_ptr;
+}
+
+// Call this from your device shutdown path (before ShutdownCipStack())
+void FreeDynamicAssemblies(void) {
+    for (size_t i = 0; i < g_dyn_count; ++i) {
+        free(g_dyn_asms[i].buf);  // you free only the payload buffers you allocated
+    }
+    g_dyn_count = 0;
+}
+
+
+/*uint8_t input_assembly_num = 102;
+uint8_t output_assembly_num = 101;
+uint8_t config_assembly_num = 103;
+
+uint8_t input_size = 128;
+uint8_t output_size = 132;
+uint8_t config_size = 0;*/
+
+
+int input_assembly_num ;
+int output_assembly_num ;
+int config_assembly_num ;
+
+int input_size ;
+int output_size ;
+int config_size ;
+
 /* global functions called by the stack */
 EipStatus ApplicationInitialization(void) {
   /* create 3 assembly object instances*/
-  /*INPUT*/
+
+
+    __android_log_print(ANDROID_LOG_INFO, "SURAJ",
+                        "++ Assembly Data\n"
+                        "__ input_assembly_num: %d\n"
+                        "--output_assembly_num: %d\n"
+                        "--config_assembly_num: %d\n"
+                        "--input_size: %d\n"
+                        "output_size: %d\n"
+                        "config_size: %d",
+                        input_assembly_num,
+                        output_assembly_num,
+                        config_assembly_num,
+                        input_size,
+                        output_size,
+                        config_size);
+
+/*  *//*INPUT*//*
   CreateAssemblyObject( DEMO_APP_INPUT_ASSEMBLY_NUM, g_assembly_data064,
                         sizeof(g_assembly_data064) );
 
-  /*OUTPUT*/
+  *//*OUTPUT*//*
   CreateAssemblyObject( DEMO_APP_OUTPUT_ASSEMBLY_NUM, g_assembly_data096,
                         sizeof(g_assembly_data096) );
 
-  /*CONFIG*/
+  *//*CONFIG*//*
   CreateAssemblyObject( DEMO_APP_CONFIG_ASSEMBLY_NUM, g_assembly_data097,
-                        sizeof(g_assembly_data097) );
+                        sizeof(g_assembly_data097) );*/
+
+
+    CreateDynamicAssembly(input_assembly_num,input_size);
+    CreateDynamicAssembly(output_assembly_num, output_size);
+    CreateDynamicAssembly(config_assembly_num, config_size);
+
+
 
   /*Heart-beat output assembly for Input only connections */
   CreateAssemblyObject(DEMO_APP_HEARTBEAT_INPUT_ONLY_ASSEMBLY_NUM, NULL, 0);
@@ -63,6 +146,10 @@ EipStatus ApplicationInitialization(void) {
   /* assembly for explicit messaging */
   CreateAssemblyObject( DEMO_APP_EXPLICT_ASSEMBLY_NUM, g_assembly_data09A,
                         sizeof(g_assembly_data09A) );
+
+
+
+/*
 
   ConfigureExclusiveOwnerConnectionPoint(0, DEMO_APP_OUTPUT_ASSEMBLY_NUM,
                                          DEMO_APP_INPUT_ASSEMBLY_NUM,
@@ -76,9 +163,26 @@ EipStatus ApplicationInitialization(void) {
                                      DEMO_APP_INPUT_ASSEMBLY_NUM,
                                      DEMO_APP_CONFIG_ASSEMBLY_NUM);
 
-  /* For NV data support connect callback functions for each object class with
-   *  NV data.
-   */
+
+*/
+
+
+    ConfigureExclusiveOwnerConnectionPoint(0, output_assembly_num,
+                                           input_assembly_num,
+                                           config_assembly_num);
+    ConfigureInputOnlyConnectionPoint(0,
+                                      DEMO_APP_HEARTBEAT_INPUT_ONLY_ASSEMBLY_NUM,
+                                      input_assembly_num,
+                                      config_assembly_num);
+    ConfigureListenOnlyConnectionPoint(0,
+                                       DEMO_APP_HEARTBEAT_LISTEN_ONLY_ASSEMBLY_NUM,
+                                       input_assembly_num,
+                                       config_assembly_num);
+
+
+    /* For NV data support connect callback functions for each object class with
+     *  NV data.
+     */
   InsertGetSetCallback(GetCipClass(kCipQoSClassCode), NvQosSetCallback,
                        kNvDataFunc);
   InsertGetSetCallback(GetCipClass(kCipTcpIpInterfaceClassCode),
@@ -169,7 +273,7 @@ EipStatus AfterAssemblyDataReceived(CipInstance *instance) {
 
 
 
-EipBool8 BeforeAssemblyDataSend(CipInstance *pa_pstInstance) {
+EipBool8 BeforeAssemblyDataSend1(CipInstance *pa_pstInstance) {
   /*update data to be sent e.g., read inputs of the device */
   /*In this sample app we mirror the data from out to inputs on data receive
    * therefore we need nothing to do here. Just return true to inform that
@@ -185,6 +289,31 @@ EipBool8 BeforeAssemblyDataSend(CipInstance *pa_pstInstance) {
      * for the explicit get-data-attribute message */
   }
   return true;
+}
+
+
+#include "cipassembly.h"
+#include "opener_api.h"
+
+static inline CipByteArray *AsmByteArray(CipInstance *inst) {
+    // Attribute 3 is the data buffer for assemblies
+    // (kAssemblyObjectInstanceAttributeIdData == 3)
+    CipAttributeStruct *a = GetCipAttribute(inst, kAssemblyObjectInstanceAttributeIdData);
+    return a ? (CipByteArray *)a->data : NULL;
+}
+
+
+
+EipBool8 BeforeAssemblyDataSend(CipInstance *inst) {
+    CipByteArray *ba = AsmByteArray(inst);
+    if (ba && ba->data) {
+        // Use the actual size of Attribute 3 (no hard-coded ASSEMBLY_SIZE)
+        sendDataToJavaFromCPPWrapper(ba->data, (int)ba->length);
+    }
+    if (inst->instance_number == DEMO_APP_EXPLICT_ASSEMBLY_NUM) {
+        // optional per-instance handling
+    }
+    return true;
 }
 
 EipStatus ResetDevice(void) {
